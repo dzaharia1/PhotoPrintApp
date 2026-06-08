@@ -176,9 +176,13 @@ struct ContentView: View {
     @State private var availableInputSlots = [String]()
     @State private var selectedPreset = PaperPreset.presets.first(where: { $0.label == "8.5 x 11\"" }) ?? PaperPreset.presets[3]
     
-    // Custom paper fields
+        // Custom paper fields
     @State private var customW: String = "8.5"
     @State private var customH: String = "11.0"
+    
+    // Zoom & Pan states
+    @State private var zoomScale: CGFloat = 1.0
+    @State private var panOffset: CGSize = .zero
     
     // Pager & Auto-batching
     @State private var autoBatchedPages: [[ImageFile]] = []
@@ -275,7 +279,7 @@ struct ContentView: View {
     }
 
     private var centerArea: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 6) {
             // Top bar: folder source on the left, drag-able region filling the rest
             ZStack {
                 WindowDragArea()
@@ -291,8 +295,12 @@ struct ContentView: View {
 
             previewCanvas
 
-            if !autoBatchedPages.isEmpty {
-                batchPagerControls
+            // Bottom controls stack
+            VStack(spacing: 8) {
+                zoomControls
+                if !autoBatchedPages.isEmpty {
+                    batchPagerControls
+                }
             }
 
             spaceUsageBanner
@@ -507,11 +515,68 @@ struct ContentView: View {
         .padding(.bottom, 8)
     }
     
+    private var zoomControls: some View {
+        HStack(spacing: 14) {
+            Button(action: {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    zoomScale = max(1.0, zoomScale - 0.25)
+                    if zoomScale == 1.0 {
+                        panOffset = .zero
+                    }
+                }
+            }) {
+                Image(systemName: "magnifyingglass.minus")
+                    .imageScale(.large)
+            }
+            .buttonStyle(.plain)
+            .disabled(zoomScale <= 1.0)
+
+            Slider(value: $zoomScale, in: 1.0...4.0)
+                .frame(width: 150)
+                .labelsHidden()
+                .onChange(of: zoomScale) { _, newScale in
+                    if newScale == 1.0 {
+                        panOffset = .zero
+                    }
+                }
+
+            Button(action: {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    zoomScale = min(4.0, zoomScale + 0.25)
+                }
+            }) {
+                Image(systemName: "magnifyingglass.plus")
+                    .imageScale(.large)
+            }
+            .buttonStyle(.plain)
+            .disabled(zoomScale >= 4.0)
+
+            Text("\(Int(zoomScale * 100))%")
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 50, alignment: .trailing)
+                
+            Button("Reset") {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    zoomScale = 1.0
+                    panOffset = .zero
+                }
+            }
+            .buttonStyle(.glass)
+            .disabled(zoomScale == 1.0)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color(NSColor.windowBackgroundColor))
+        )
+    }
+
     private var previewCanvas: some View {
         VStack {
             let imagesToPreview = autoBatchedPages.isEmpty ? selectedImages : autoBatchedPages[currentBatchPageIndex]
             if !imagesToPreview.isEmpty {
-                PrintPreviewView(images: imagesToPreview, config: config)
+                PrintPreviewView(images: imagesToPreview, config: config, zoomScale: $zoomScale, panOffset: $panOffset)
             } else {
                 Spacer()
                 VStack(spacing: 16) {
@@ -1454,6 +1519,8 @@ struct ImageRow: View {
 struct PrintPreviewView: View {
     let images: [ImageFile]
     let config: PrintConfig
+    @Binding var zoomScale: CGFloat
+    @Binding var panOffset: CGSize
     
     @State private var previewImage: NSImage? = nil
     @State private var isGenerating = false
@@ -1463,16 +1530,11 @@ struct PrintPreviewView: View {
             if isGenerating {
                 ProgressView("Updating preview...")
             } else if let img = previewImage {
-                Image(nsImage: img)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.8)
-                    )
-                    .shadow(color: Color.black.opacity(0.25), radius: 20, x: 0, y: 10)
-                    .padding(20)
+                ZoomableImageView(image: img, zoomScale: $zoomScale, panOffset: $panOffset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 20)
+                    .padding(.top, 4)
             } else {
                 VStack(spacing: 16) {
                     Image(systemName: "photo.on.rectangle")
@@ -1491,12 +1553,12 @@ struct PrintPreviewView: View {
     private func updatePreview() {
         guard !images.isEmpty else {
             previewImage = nil
+            zoomScale = 1.0
+            panOffset = .zero
             return
         }
         
         isGenerating = true
-        // Render at the display's physical pixel density so the preview is crisp on Retina.
-        // Cap at 144 (2x) so big sheets don't blow up memory/CPU.
         let scale = NSScreen.main?.backingScaleFactor ?? 2.0
         let previewDPI: CGFloat = min(144, 72 * scale)
         DispatchQueue.global(qos: .userInitiated).async {
@@ -1505,18 +1567,229 @@ struct PrintPreviewView: View {
                 DispatchQueue.main.async {
                     self.previewImage = nil
                     self.isGenerating = false
+                    self.zoomScale = 1.0
+                    self.panOffset = .zero
                 }
                 return
             }
 
-            // Hand the NSImage its logical (point) size, not pixel size, so SwiftUI lays it out
-            // at the right scale while keeping the extra pixels for Retina rendering.
             let pointSize = NSSize(width: CGFloat(cgImg.width) / scale, height: CGFloat(cgImg.height) / scale)
             let nsImg = NSImage(cgImage: cgImg, size: pointSize)
             DispatchQueue.main.async {
                 self.previewImage = nsImg
                 self.isGenerating = false
+                self.zoomScale = 1.0
+                self.panOffset = .zero
             }
         }
+    }
+}
+
+struct ZoomableImageView: NSViewRepresentable {
+    let image: NSImage
+    @Binding var zoomScale: CGFloat
+    @Binding var panOffset: CGSize
+    
+    func makeNSView(context: Context) -> ZoomableImageNSView {
+        let view = ZoomableImageNSView()
+        view.image = image
+        view.zoomScale = zoomScale
+        view.panOffset = panOffset
+        
+        view.onZoomChanged = { scale in
+            self.zoomScale = scale
+        }
+        view.onPanChanged = { offset in
+            self.panOffset = offset
+        }
+        
+        return view
+    }
+    
+    func updateNSView(_ nsView: ZoomableImageNSView, context: Context) {
+        nsView.image = image
+        nsView.zoomScale = zoomScale
+        nsView.panOffset = panOffset
+    }
+}
+
+final class ZoomableImageNSView: NSView {
+    var image: NSImage? {
+        didSet {
+            needsDisplay = true
+        }
+    }
+    
+    var zoomScale: CGFloat = 1.0 {
+        didSet {
+            needsDisplay = true
+        }
+    }
+    
+    var panOffset: CGSize = .zero {
+        didSet {
+            needsDisplay = true
+        }
+    }
+    
+    var onZoomChanged: ((CGFloat) -> Void)?
+    var onPanChanged: ((CGSize) -> Void)?
+    
+    private var isDragging = false
+    private var lastDragPoint: NSPoint = .zero
+    
+    override var isFlipped: Bool { false }
+    
+    override func draw(_ dirtyRect: NSRect) {
+        guard let image = image else { return }
+        
+        // Clip all drawing to the view's bounds to prevent overlapping sidebars or other views
+        let clipPath = NSBezierPath(rect: bounds)
+        clipPath.addClip()
+        
+        let boundsSize = bounds.size
+        let imgSize = image.size
+        guard boundsSize.width > 0, boundsSize.height > 0, imgSize.width > 0, imgSize.height > 0 else { return }
+        
+        let drawingBounds = bounds.insetBy(dx: 16, dy: 16)
+        guard drawingBounds.width > 0, drawingBounds.height > 0 else { return }
+        
+        let wRatio = drawingBounds.width / imgSize.width
+        let hRatio = drawingBounds.height / imgSize.height
+        let ratio = min(wRatio, hRatio)
+        
+        let fitWidth = imgSize.width * ratio
+        let fitHeight = imgSize.height * ratio
+        
+        let centerX = drawingBounds.midX
+        let centerY = drawingBounds.midY
+        
+        let scaledW = fitWidth * zoomScale
+        let scaledH = fitHeight * zoomScale
+        
+        let drawX = centerX - (scaledW / 2) + panOffset.width
+        let drawY = centerY - (scaledH / 2) + panOffset.height
+        
+        let targetRect = NSRect(x: drawX, y: drawY, width: scaledW, height: scaledH)
+        
+        NSGraphicsContext.saveGraphicsState()
+        
+        // Draw shadow
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.25)
+        shadow.shadowBlurRadius = 20
+        shadow.shadowOffset = NSSize(width: 0, height: -10)
+        shadow.set()
+        
+        let path = NSBezierPath(roundedRect: targetRect, xRadius: 8, yRadius: 8)
+        NSColor.white.setFill()
+        path.fill()
+        
+        NSGraphicsContext.restoreGraphicsState()
+        NSGraphicsContext.saveGraphicsState()
+        
+        path.addClip()
+        image.draw(in: targetRect, from: NSRect(origin: .zero, size: imgSize), operation: .sourceOver, fraction: 1.0)
+        
+        NSGraphicsContext.restoreGraphicsState()
+        
+        // Draw border
+        NSGraphicsContext.saveGraphicsState()
+        let borderPath = NSBezierPath(roundedRect: targetRect.insetBy(dx: 0.4, dy: 0.4), xRadius: 8, yRadius: 8)
+        borderPath.lineWidth = 0.8
+        NSColor.textColor.withAlphaComponent(0.15).setStroke()
+        borderPath.stroke()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+    
+    override func scrollWheel(with event: NSEvent) {
+        let delta = event.scrollingDeltaY
+        guard abs(delta) > 0.01 else { return }
+        
+        let zoomFactor: CGFloat = 0.005
+        let oldScale = zoomScale
+        let newScale = min(max(zoomScale + delta * zoomFactor, 1.0), 4.0)
+        
+        if newScale != oldScale {
+            zoomScale = newScale
+            if zoomScale == 1.0 {
+                panOffset = .zero
+                onPanChanged?(.zero)
+            } else {
+                clampPan(contentSize: image?.size ?? .zero)
+            }
+            onZoomChanged?(zoomScale)
+        }
+    }
+    
+    override func magnify(with event: NSEvent) {
+        let magnification = event.magnification
+        let oldScale = zoomScale
+        let newScale = min(max(zoomScale + magnification, 1.0), 4.0)
+        
+        if newScale != oldScale {
+            zoomScale = newScale
+            if zoomScale == 1.0 {
+                panOffset = .zero
+                onPanChanged?(.zero)
+            } else {
+                clampPan(contentSize: image?.size ?? .zero)
+            }
+            onZoomChanged?(zoomScale)
+        }
+    }
+    
+    override func mouseDown(with event: NSEvent) {
+        guard zoomScale > 1.0 else { return }
+        isDragging = true
+        lastDragPoint = convert(event.locationInWindow, from: nil)
+    }
+    
+    override func mouseDragged(with event: NSEvent) {
+        guard isDragging, zoomScale > 1.0 else { return }
+        let currentPoint = convert(event.locationInWindow, from: nil)
+        let dx = currentPoint.x - lastDragPoint.x
+        let dy = currentPoint.y - lastDragPoint.y
+        
+        panOffset.width += dx
+        panOffset.height += dy
+        lastDragPoint = currentPoint
+        
+        clampPan(contentSize: image?.size ?? .zero)
+        onPanChanged?(panOffset)
+        needsDisplay = true
+    }
+    
+    override func mouseUp(with event: NSEvent) {
+        isDragging = false
+    }
+    
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        clampPan(contentSize: image?.size ?? .zero)
+        onPanChanged?(panOffset)
+    }
+    
+    private func clampPan(contentSize: NSSize) {
+        guard contentSize.width > 0, contentSize.height > 0 else { return }
+        
+        let drawingBounds = bounds.insetBy(dx: 16, dy: 16)
+        guard drawingBounds.width > 0, drawingBounds.height > 0 else { return }
+        
+        let wRatio = drawingBounds.width / contentSize.width
+        let hRatio = drawingBounds.height / contentSize.height
+        let ratio = min(wRatio, hRatio)
+        
+        let fitWidth = contentSize.width * ratio
+        let fitHeight = contentSize.height * ratio
+        
+        let scaledW = fitWidth * zoomScale
+        let scaledH = fitHeight * zoomScale
+        
+        let maxLimitX = max(0, (scaledW - drawingBounds.width) / 2)
+        let maxLimitY = max(0, (scaledH - drawingBounds.height) / 2)
+        
+        panOffset.width = scaledW <= drawingBounds.width ? 0 : min(max(panOffset.width, -maxLimitX), maxLimitX)
+        panOffset.height = scaledH <= drawingBounds.height ? 0 : min(max(panOffset.height, -maxLimitY), maxLimitY)
     }
 }
