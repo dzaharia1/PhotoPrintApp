@@ -450,7 +450,7 @@ struct ContentView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 0)
     }
 
     private var selectionHelpers: some View {
