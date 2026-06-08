@@ -212,7 +212,13 @@ struct ContentView: View {
             .ignoresSafeArea(.all, edges: .top)
         }
         .frame(minWidth: 1100, minHeight: 700)
-        .onAppear(perform: initializeApp)
+        .onAppear {
+            initializeApp()
+            updateWindowAppearance()
+        }
+        .onChange(of: appTheme) { _, _ in
+            updateWindowAppearance()
+        }
         .preferredColorScheme(selectedColorScheme)
     }
 
@@ -1303,6 +1309,18 @@ struct ContentView: View {
                     self.clearBatch()
                 }
             }
+        }
+    }
+
+    private func updateWindowAppearance() {
+        guard let window = WindowRef.shared.window else { return }
+        switch appTheme {
+        case "Light":
+            window.appearance = NSAppearance(named: .aqua)
+        case "Dark":
+            window.appearance = NSAppearance(named: .darkAqua)
+        default:
+            window.appearance = nil
         }
     }
 }
