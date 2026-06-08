@@ -17,6 +17,9 @@ mkdir -p "$RESOURCES_DIR"
 echo "📝 Copying Info.plist..."
 cp Info.plist "$CONTENTS_DIR/Info.plist"
 
+echo "🎨 Copying AppIcon.icns..."
+cp AppIcon.icns "$RESOURCES_DIR/AppIcon.icns"
+
 echo "⚙️ Compiling Swift files..."
 swiftc -parse-as-library -O \
   -target arm64-apple-macos26.0 \
