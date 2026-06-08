@@ -42,10 +42,14 @@ func finderTagSwatch(_ tag: String, size: CGFloat = 12) -> NSImage {
 // MARK: - Liquid Glass helpers
 
 // An invisible region that lets the user drag the window when they click+drag it.
-// Use sparingly — only where you want window-move behavior, not under interactive controls.
+// Uses performDrag(with:) which reliably moves borderless windows (the passive
+// mouseDownCanMoveWindow path does not work for borderless windows).
 struct WindowDragArea: NSViewRepresentable {
     final class DragView: NSView {
         override var mouseDownCanMoveWindow: Bool { true }
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
     }
     func makeNSView(context: Context) -> NSView { DragView() }
     func updateNSView(_ nsView: NSView, context: Context) {}
@@ -172,8 +176,8 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // Dark photography-app backdrop
-            Color(red: 0.07, green: 0.07, blue: 0.08)
+            // Adaptive backdrop that follows the system light/dark theme
+            Color(NSColor.windowBackgroundColor)
                 .ignoresSafeArea()
 
             HStack(spacing: 0) {
@@ -239,7 +243,7 @@ struct ContentView: View {
                 selectionHelpers
             }
         }
-        .glassPanel()
+        .glassPanel(cornerRadius: 15)
     }
 
     private var centerArea: some View {
@@ -289,12 +293,12 @@ struct ContentView: View {
         }
         .frame(maxHeight: .infinity)
         .background(
-            Color(red: 0.11, green: 0.11, blue: 0.12)
+            Color(NSColor.windowBackgroundColor)
                 .ignoresSafeArea()
         )
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(Color.white.opacity(0.06))
+                .fill(Color(NSColor.separatorColor))
                 .frame(width: 0.5)
         }
     }
@@ -595,11 +599,11 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
+                    .fill(Color.primary.opacity(0.06))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.6)
+                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.6)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
@@ -1324,11 +1328,11 @@ struct ImageRow: View {
         .padding(.horizontal, 8)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(img.isSelected ? Color.accentColor.opacity(0.18) : Color.white.opacity(0.001))
+                .fill(img.isSelected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.001))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(img.isSelected ? Color.accentColor.opacity(0.45) : Color.white.opacity(0.08), lineWidth: 0.6)
+                .strokeBorder(img.isSelected ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.08), lineWidth: 0.6)
         )
         .opacity(img.isPrinted ? 0.55 : (img.isSelected ? 1.0 : (wouldFit ? 1.0 : 0.4)))
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -1362,7 +1366,7 @@ struct PrintPreviewView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.8)
+                            .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.8)
                     )
                     .shadow(color: Color.black.opacity(0.25), radius: 20, x: 0, y: 10)
                     .padding(20)

@@ -48,15 +48,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         win.center()
 
         // Container holds the SwiftUI content plus an edge-resize overlay, clipped
-        // to a 36pt continuous corner radius (this shapes the whole window).
+        // to a continuous corner radius matching the native Tahoe window shape.
         let container = NSView(frame: win.frame)
         container.wantsLayer = true
-        container.layer?.cornerRadius = 36
+        container.layer?.cornerRadius = 27
         container.layer?.cornerCurve = .continuous
         container.layer?.masksToBounds = true
         container.autoresizingMask = [.width, .height]
 
-        let hosting = NSHostingView(rootView: ContentView().preferredColorScheme(.dark))
+        let hosting = NSHostingView(rootView: ContentView())
         hosting.frame = container.bounds
         hosting.autoresizingMask = [.width, .height]
         container.addSubview(hosting)
@@ -87,7 +87,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// window. It only intercepts clicks within `margin` of an edge; everything
 /// else passes through to the SwiftUI content beneath it.
 final class BorderlessResizeView: NSView {
-    private let margin: CGFloat = 8
+    private let margin: CGFloat = 10
+    var cornerRadius: CGFloat = 27
 
     private enum Edge {
         case left, right, top, bottom, topLeft, topRight, bottomLeft, bottomRight
@@ -118,32 +119,78 @@ final class BorderlessResizeView: NSView {
     }
 
     private func edge(at p: NSPoint) -> Edge? {
-        let w = bounds.width, h = bounds.height
-        let nearL = p.x <= margin
-        let nearR = p.x >= w - margin
-        let nearB = p.y <= margin          // non-flipped: y = 0 is bottom
-        let nearT = p.y >= h - margin
-        switch (nearL, nearR, nearT, nearB) {
-        case (true, _, true, _):  return .topLeft
-        case (_, true, true, _):  return .topRight
-        case (true, _, _, true):  return .bottomLeft
-        case (_, true, _, true):  return .bottomRight
-        case (true, _, _, _):     return .left
-        case (_, true, _, _):     return .right
-        case (_, _, true, _):     return .top
-        case (_, _, _, true):     return .bottom
-        default:                  return nil
+        guard bounds.contains(p) else { return nil }
+
+        let w = bounds.width
+        let h = bounds.height
+        let r = cornerRadius
+
+        // 1. Check corner regions (dist is distance from corner center of the arc)
+        if p.x < r && p.y < r {
+            // Bottom-Left
+            let dx = p.x - r
+            let dy = p.y - r
+            let dist = sqrt(dx*dx + dy*dy)
+            if dist <= r && r - dist <= margin {
+                return .bottomLeft
+            }
+            return nil
+        } else if p.x > w - r && p.y < r {
+            // Bottom-Right
+            let dx = p.x - (w - r)
+            let dy = p.y - r
+            let dist = sqrt(dx*dx + dy*dy)
+            if dist <= r && r - dist <= margin {
+                return .bottomRight
+            }
+            return nil
+        } else if p.x < r && p.y > h - r {
+            // Top-Left
+            let dx = p.x - r
+            let dy = p.y - (h - r)
+            let dist = sqrt(dx*dx + dy*dy)
+            if dist <= r && r - dist <= margin {
+                return .topLeft
+            }
+            return nil
+        } else if p.x > w - r && p.y > h - r {
+            // Top-Right
+            let dx = p.x - (w - r)
+            let dy = p.y - (h - r)
+            let dist = sqrt(dx*dx + dy*dy)
+            if dist <= r && r - dist <= margin {
+                return .topRight
+            }
+            return nil
         }
+
+        // 2. Check straight edges
+        if p.x <= margin {
+            return .left
+        } else if p.x >= w - margin {
+            return .right
+        } else if p.y <= margin {
+            return .bottom
+        } else if p.y >= h - margin {
+            return .top
+        }
+
+        return nil
     }
 
     override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         switch edge(at: p) {
-        case .left, .right:                 NSCursor.resizeLeftRight.set()
-        case .top, .bottom:                 NSCursor.resizeUpDown.set()
-        case .topLeft, .bottomRight,
-             .topRight, .bottomLeft:        NSCursor.crosshair.set()
-        case nil:                           NSCursor.arrow.set()
+        case .left, .right:
+            NSCursor.resizeLeftRight.set()
+        case .top, .bottom:
+            NSCursor.resizeUpDown.set()
+        case .topLeft, .bottomRight:
+            NSCursor.windowResizeNorthWestSouthEast.set()
+        case .topRight, .bottomLeft:
+            NSCursor.windowResizeNorthEastSouthWest.set()
+        case nil:
+            NSCursor.arrow.set()
         }
     }
 
@@ -241,5 +288,25 @@ struct WindowControls: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+extension NSCursor {
+    static var windowResizeNorthWestSouthEast: NSCursor {
+        let sel = Selector(("_windowResizeNorthWestSouthEastCursor"))
+        if NSCursor.responds(to: sel),
+           let cursor = NSCursor.perform(sel)?.takeUnretainedValue() as? NSCursor {
+            return cursor
+        }
+        return NSCursor.arrow
+    }
+
+    static var windowResizeNorthEastSouthWest: NSCursor {
+        let sel = Selector(("_windowResizeNorthEastSouthWestCursor"))
+        if NSCursor.responds(to: sel),
+           let cursor = NSCursor.perform(sel)?.takeUnretainedValue() as? NSCursor {
+            return cursor
+        }
+        return NSCursor.arrow
     }
 }
