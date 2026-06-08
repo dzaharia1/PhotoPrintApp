@@ -229,8 +229,8 @@ struct ContentView: View {
                 WindowDragArea()
                     .frame(height: 38)
                 WindowControls()
-                    .padding(.leading, 14)
-                    .padding(.top, 14)
+                    .padding(.leading, 8)
+                    .padding(.top, 8)
             }
 
             filterBar
@@ -425,7 +425,7 @@ struct ContentView: View {
         .padding(.vertical, 8)
         .glassEffect(.regular, in: Capsule(style: .continuous))
         .opacity(isDisabled ? 0.45 : 1.0)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 8)
         .padding(.bottom, 8)
     }
     
@@ -497,8 +497,8 @@ struct ContentView: View {
                 .disabled(selectedImages.isEmpty)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
     }
     
     private var previewCanvas: some View {
