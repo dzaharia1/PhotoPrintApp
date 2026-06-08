@@ -146,6 +146,16 @@ struct ImagePreviewItem: View {
 }
 
 struct ContentView: View {
+    @AppStorage("appTheme") private var appTheme: String = "System"
+
+    private var selectedColorScheme: ColorScheme? {
+        switch appTheme {
+        case "Light": return .light
+        case "Dark": return .dark
+        default: return nil
+        }
+    }
+
     @State private var selectedDirectory: URL? = nil
     @State private var images = [ImageFile]()
     @State private var config = PrintConfig()
@@ -203,6 +213,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 1100, minHeight: 700)
         .onAppear(perform: initializeApp)
+        .preferredColorScheme(selectedColorScheme)
     }
 
     private var leftPanel: some View {
@@ -250,11 +261,16 @@ struct ContentView: View {
     private var centerArea: some View {
         VStack(spacing: 12) {
             // Top bar: folder source on the left, drag-able region filling the rest
-            ZStack(alignment: .leading) {
+            ZStack {
                 WindowDragArea()
                     .frame(height: 60)
-                folderHeader
-                    .frame(maxWidth: 320, alignment: .leading)
+                HStack {
+                    folderHeader
+                        .frame(maxWidth: 320, alignment: .leading)
+                    Spacer()
+                    themeMenuButton
+                        .padding(.trailing, 16)
+                }
             }
 
             previewCanvas
@@ -343,6 +359,44 @@ struct ContentView: View {
             Spacer()
         }
         .padding(16)
+    }
+
+    private var themeMenuButton: some View {
+        Menu {
+            Button(action: { appTheme = "Light" }) {
+                Label("Light", systemImage: "sun.max")
+            }
+            Button(action: { appTheme = "Dark" }) {
+                Label("Dark", systemImage: "moon")
+            }
+            Button(action: { appTheme = "System" }) {
+                Label("Follow System", systemImage: "display")
+            }
+        } label: {
+            Image(systemName: currentThemeIcon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.secondary)
+                .frame(width: 28, height: 28)
+                .background(
+                    Circle()
+                        .fill(Color.primary.opacity(0.06))
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.6)
+                )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .help("Select Theme")
+    }
+
+    private var currentThemeIcon: String {
+        switch appTheme {
+        case "Light": return "sun.max"
+        case "Dark": return "moon"
+        default: return "display"
+        }
     }
 
     private var filterBar: some View {
