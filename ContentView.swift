@@ -233,6 +233,7 @@ struct ContentView: View {
                         .foregroundColor(.gray)
                     Button(action: selectFolder) {
                         Text("Open Folder")
+                            .foregroundStyle(.white)
                     }
                     .buttonStyle(.glassProminent)
                     .controlSize(.large)
@@ -419,6 +420,7 @@ struct ContentView: View {
                         Text("Auto")
                             .fontWeight(.semibold)
                     }
+                    .foregroundStyle(.white)
                 }
                 .buttonStyle(.glassProminent)
                 .disabled(images.filter { !$0.isPrinted }.isEmpty)
@@ -752,14 +754,17 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 if !autoBatchedPages.isEmpty {
                     Button(action: printAllBatchPages) {
-                        if isPrinting {
-                            ProgressView().scaleEffect(0.5)
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text("Print All Pages")
-                                .fontWeight(.semibold)
-                                .frame(maxWidth: .infinity)
+                        Group {
+                            if isPrinting {
+                                ProgressView().scaleEffect(0.5)
+                                    .frame(maxWidth: .infinity)
+                            } else {
+                                Text("Print All Pages")
+                                    .fontWeight(.semibold)
+                                    .frame(maxWidth: .infinity)
+                            }
                         }
+                        .foregroundStyle(.white)
                     }
                     .buttonStyle(.glassProminent)
                     .controlSize(.large)
@@ -768,15 +773,18 @@ struct ContentView: View {
                 }
 
                 Button(action: printCurrentPage) {
-                    if isPrinting && autoBatchedPages.isEmpty {
-                        ProgressView().scaleEffect(0.5)
-                            .frame(maxWidth: .infinity)
-                    } else {
-                        let btnLabel = autoBatchedPages.isEmpty ? "Print Current Page" : "Print This Page"
-                        Text(btnLabel)
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
+                    Group {
+                        if isPrinting && autoBatchedPages.isEmpty {
+                            ProgressView().scaleEffect(0.5)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            let btnLabel = autoBatchedPages.isEmpty ? "Print Current Page" : "Print This Page"
+                            Text(btnLabel)
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                        }
                     }
+                    .foregroundStyle(.white)
                 }
                 .buttonStyle(.glassProminent)
                 .controlSize(.large)
