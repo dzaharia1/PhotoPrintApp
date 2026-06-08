@@ -102,9 +102,10 @@ class ImageCache {
         
         guard let source = CGImageSourceCreateWithURL(url as NSURL, nil) else { return nil }
         let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: size
+            kCGImageSourceThumbnailMaxPixelSize: size,
+            kCGImageSourceShouldCacheImmediately: true
         ]
         
         guard let cgImg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
@@ -439,27 +440,23 @@ struct ContentView: View {
     }
     
     private var imageList: some View {
-        List {
-            let filtered = images.filter {
-                nameFilter.isEmpty ? true : $0.name.localizedCaseInsensitiveContains(nameFilter)
+        ScrollView {
+            LazyVStack(spacing: 4) {
+                let filtered = images.filter {
+                    nameFilter.isEmpty ? true : $0.name.localizedCaseInsensitiveContains(nameFilter)
+                }
+                let selected = selectedImages
+                ForEach(filtered) { img in
+                    ImageRow(
+                        img: img,
+                        longerDim: config.longerDim,
+                        wouldFit: LayoutEngine.wouldFit(img: img, selected: selected, config: config),
+                        onToggle: { toggleImageSelection(img) }
+                    )
+                }
             }
-
-            ForEach(filtered) { img in
-                ImageRow(
-                    img: img,
-                    longerDim: config.longerDim,
-                    wouldFit: LayoutEngine.wouldFit(img: img, selected: selectedImages, config: config),
-                    onToggle: { toggleImageSelection(img) }
-                )
-                .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
+            .padding(.horizontal, 8)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(Color.clear)
-        .padding(.horizontal, 0)
     }
 
     private var selectionHelpers: some View {
@@ -1342,7 +1339,20 @@ struct ImageRow: View {
     let wouldFit: Bool
     let onToggle: () -> Void
     
-    @State private var thumbnail: NSImage? = nil
+    @State private var thumbnail: NSImage?
+    
+    init(img: ImageFile, longerDim: CGFloat, wouldFit: Bool, onToggle: @escaping () -> Void) {
+        self.img = img
+        self.longerDim = longerDim
+        self.wouldFit = wouldFit
+        self.onToggle = onToggle
+        
+        if let cached = ImageCache.shared.getCachedThumbnail(for: img.url, size: 88) {
+            self._thumbnail = State(initialValue: cached)
+        } else {
+            self._thumbnail = State(initialValue: nil)
+        }
+    }
     
     var body: some View {
         let aspectHeight = LayoutEngine.printH(img: img, longerDim: longerDim)
