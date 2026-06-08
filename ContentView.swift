@@ -203,10 +203,13 @@ struct ContentView: View {
 
     private var leftPanel: some View {
         VStack(spacing: 0) {
-            // Traffic-light space + drag region (folder header now lives in the center pane)
+            // Custom traffic lights + drag region (folder header lives in the center pane)
             ZStack(alignment: .topLeading) {
                 WindowDragArea()
-                    .frame(height: 32)
+                    .frame(height: 38)
+                WindowControls()
+                    .padding(.leading, 14)
+                    .padding(.top, 14)
             }
 
             filterBar
