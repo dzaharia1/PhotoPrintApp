@@ -280,9 +280,9 @@ struct WindowControls: View {
             ZStack {
                 Circle()
                     .fill(color)
-                    .frame(width: 12, height: 12)
+                    .frame(width: 14, height: 14)
                 Image(systemName: symbol)
-                    .font(.system(size: 7, weight: .bold))
+                    .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(Color.black.opacity(0.55))
                     .opacity(hovering ? 1 : 0)
             }
