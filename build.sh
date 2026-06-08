@@ -22,7 +22,6 @@ cp AppIcon.icns "$RESOURCES_DIR/AppIcon.icns"
 
 echo "⚙️ Compiling Swift files..."
 swiftc -parse-as-library -O \
-  -target arm64-apple-macos26.0 \
   -o "$MACOS_DIR/PhotoPrint" \
   PhotoPrintApp.swift \
   Models.swift \

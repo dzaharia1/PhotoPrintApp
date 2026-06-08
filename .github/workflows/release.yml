@@ -1,0 +1,31 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on tags starting with v (e.g., v1.0.0, v2.1.0)
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Application
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Compress App Bundle
+        run: zip -r PhotoPrint.zip PhotoPrint.app
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PhotoPrint.zip
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
