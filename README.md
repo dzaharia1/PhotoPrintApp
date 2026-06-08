@@ -1,8 +1,10 @@
 # PhotoPrint
 
-PhotoPrint is a professional, high-fidelity macOS utility application built with Swift and SwiftUI. It streamlines the process of printing multiple photos onto single paper sheets, automatically arranging them using a bin-packing layout algorithm to maximize space utilization.
+![PhotoPrint Application Preview](apppreview.png)
 
-It interfaces directly with the native macOS CUPS printing system to discover printers and submit high-resolution 300 DPI composite print jobs.
+PhotoPrint is a macOS utility application built with Swift and SwiftUI. It streamlines the process of printing multiple photos onto single paper sheets, automatically arranging them using a bin-packing layout algorithm to maximize space utilization.
+
+It interfaces directly with the native macOS CUPS printing system to discover printers and submit print jobs.
 
 ## Features
 
@@ -30,7 +32,7 @@ It interfaces directly with the native macOS CUPS printing system to discover pr
 
 ## System Requirements
 
-- **OS:** macOS Ventura (13.0) or later.
+- **OS:** macOS 26 (Tahoe) or later. The app uses Liquid Glass window styling and custom window chrome that require macOS 26.
 - **Tools:** Xcode Command Line Tools (specifically `swiftc` compiler).
 
 ## How to Build
