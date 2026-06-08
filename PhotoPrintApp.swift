@@ -254,11 +254,19 @@ final class BorderlessResizeView: NSView {
 // MARK: - Custom traffic lights (borderless windows have no standard buttons)
 
 struct WindowControls: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var isKeyWindow = true
     @State private var hovering = false
 
     private let closeColor = Color(red: 1.00, green: 0.37, blue: 0.34)
     private let minColor   = Color(red: 1.00, green: 0.74, blue: 0.18)
     private let zoomColor  = Color(red: 0.24, green: 0.79, blue: 0.25)
+
+    private var inactiveColor: Color {
+        colorScheme == .dark
+            ? Color(red: 0.28, green: 0.28, blue: 0.28)
+            : Color(red: 0.88, green: 0.88, blue: 0.88)
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -273,13 +281,28 @@ struct WindowControls: View {
             }
         }
         .onHover { hovering = $0 }
+        .onAppear {
+            if let window = WindowRef.shared.window {
+                isKeyWindow = window.isKeyWindow
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
+            if let window = notification.object as? NSWindow, window == WindowRef.shared.window {
+                isKeyWindow = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { notification in
+            if let window = notification.object as? NSWindow, window == WindowRef.shared.window {
+                isKeyWindow = false
+            }
+        }
     }
 
     private func trafficButton(color: Color, symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(color)
+                    .fill(hovering || isKeyWindow ? color : inactiveColor)
                     .frame(width: 14, height: 14)
                 Image(systemName: symbol)
                     .font(.system(size: 8, weight: .bold))
