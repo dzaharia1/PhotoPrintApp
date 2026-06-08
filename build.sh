@@ -34,4 +34,7 @@ swiftc -parse-as-library -O \
 echo "🔑 Setting executable permissions..."
 chmod +x "$MACOS_DIR/PhotoPrint"
 
+echo "🔗 Creating Applications symlink..."
+ln -sfn "$PWD/PhotoPrint.app" "$HOME/Applications/PhotoPrint.app"
+
 echo "🎉 Build completed successfully! Generated $APP_DIR"
