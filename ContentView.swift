@@ -87,15 +87,20 @@ extension View {
 // Cache to prevent loading thumbnails repeatedly
 class ImageCache {
     static let shared = ImageCache()
-    private var cache = NSCache<NSURL, NSImage>()
+    private var cache = NSCache<NSString, NSImage>()
+    
+    func getCachedThumbnail(for url: URL, size: CGFloat) -> NSImage? {
+        let key = "\(url.path)_\(Int(size))" as NSString
+        return cache.object(forKey: key)
+    }
     
     func getThumbnail(for url: URL, size: CGFloat = 120) -> NSImage? {
-        let nsUrl = url as NSURL
-        if let cached = cache.object(forKey: nsUrl) {
+        let key = "\(url.path)_\(Int(size))" as NSString
+        if let cached = cache.object(forKey: key) {
             return cached
         }
         
-        guard let source = CGImageSourceCreateWithURL(nsUrl, nil) else { return nil }
+        guard let source = CGImageSourceCreateWithURL(url as NSURL, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
@@ -107,7 +112,7 @@ class ImageCache {
         }
         
         let nsImg = NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
-        cache.setObject(nsImg, forKey: nsUrl)
+        cache.setObject(nsImg, forKey: key)
         return nsImg
     }
 }
@@ -134,10 +139,14 @@ struct ImagePreviewItem: View {
             }
         }
         .onAppear {
-            DispatchQueue.global(qos: .userInitiated).async {
-                if let thumb = ImageCache.shared.getThumbnail(for: img.url, size: 300) {
-                    DispatchQueue.main.async {
-                        self.thumbnail = thumb
+            if let cached = ImageCache.shared.getCachedThumbnail(for: img.url, size: 300) {
+                self.thumbnail = cached
+            } else {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    if let thumb = ImageCache.shared.getThumbnail(for: img.url, size: 300) {
+                        DispatchQueue.main.async {
+                            self.thumbnail = thumb
+                        }
                     }
                 }
             }
@@ -1363,10 +1372,14 @@ struct ImageRow: View {
                 }
             }
             .onAppear {
-                DispatchQueue.global(qos: .userInitiated).async {
-                    if let thumb = ImageCache.shared.getThumbnail(for: img.url, size: 88) {
-                        DispatchQueue.main.async {
-                            self.thumbnail = thumb
+                if let cached = ImageCache.shared.getCachedThumbnail(for: img.url, size: 88) {
+                    self.thumbnail = cached
+                } else {
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        if let thumb = ImageCache.shared.getThumbnail(for: img.url, size: 88) {
+                            DispatchQueue.main.async {
+                                self.thumbnail = thumb
+                            }
                         }
                     }
                 }
