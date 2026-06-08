@@ -27,6 +27,7 @@ struct PrintConfig: Equatable {
     var mediaType: String = "any"
     var inputSlot: String = "auto"
     var printer: String = ""
+    var dpi: CGFloat = 300
 }
 
 struct PaperPreset: Identifiable, Hashable {

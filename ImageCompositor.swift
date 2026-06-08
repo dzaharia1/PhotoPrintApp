@@ -174,17 +174,17 @@ struct ImageCompositor {
         return context.makeImage()
     }
     
-    // Save high-resolution composite to TIFF file at 300 DPI
-    static func saveTIFF(cgImage: CGImage, to url: URL) -> Bool {
+    // Save high-resolution composite to TIFF with the given DPI metadata
+    static func saveTIFF(cgImage: CGImage, to url: URL, dpi: CGFloat = 300) -> Bool {
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.tiff.identifier as CFString, 1, nil) else {
             return false
         }
-        
+
         let properties: [CFString: Any] = [
-            kCGImagePropertyDPIWidth: 300.0,
-            kCGImagePropertyDPIHeight: 300.0
+            kCGImagePropertyDPIWidth: dpi,
+            kCGImagePropertyDPIHeight: dpi
         ]
-        
+
         CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
         return CGImageDestinationFinalize(destination)
     }

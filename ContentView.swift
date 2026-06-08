@@ -1,4 +1,84 @@
 import SwiftUI
+import AppKit
+
+// MARK: - Finder tag colors (matches macOS Finder default tag swatches)
+
+func finderTagColor(_ tag: String) -> Color {
+    switch tag {
+    case "Red":    return Color(red: 0.988, green: 0.376, blue: 0.345) // #FC6058
+    case "Orange": return Color(red: 0.992, green: 0.620, blue: 0.278) // #FD9E47
+    case "Yellow": return Color(red: 0.996, green: 0.800, blue: 0.267) // #FECC44
+    case "Green":  return Color(red: 0.365, green: 0.769, blue: 0.400) // #5DC466
+    case "Blue":   return Color(red: 0.353, green: 0.784, blue: 0.980) // #5AC8FA
+    case "Purple": return Color(red: 0.773, green: 0.541, blue: 0.976) // #C58AF9
+    case "Gray":   return Color(red: 0.624, green: 0.624, blue: 0.624) // #9F9F9F
+    default:       return Color.gray
+    }
+}
+
+func finderTagNSColor(_ tag: String) -> NSColor {
+    switch tag {
+    case "Red":    return NSColor(red: 0.988, green: 0.376, blue: 0.345, alpha: 1)
+    case "Orange": return NSColor(red: 0.992, green: 0.620, blue: 0.278, alpha: 1)
+    case "Yellow": return NSColor(red: 0.996, green: 0.800, blue: 0.267, alpha: 1)
+    case "Green":  return NSColor(red: 0.365, green: 0.769, blue: 0.400, alpha: 1)
+    case "Blue":   return NSColor(red: 0.353, green: 0.784, blue: 0.980, alpha: 1)
+    case "Purple": return NSColor(red: 0.773, green: 0.541, blue: 0.976, alpha: 1)
+    case "Gray":   return NSColor(red: 0.624, green: 0.624, blue: 0.624, alpha: 1)
+    default:       return NSColor.gray
+    }
+}
+
+func finderTagSwatch(_ tag: String, size: CGFloat = 12) -> NSImage {
+    let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+        finderTagNSColor(tag).setFill()
+        NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5)).fill()
+        return true
+    }
+    image.isTemplate = false
+    return image
+}
+
+// MARK: - Liquid Glass helpers
+
+// An invisible region that lets the user drag the window when they click+drag it.
+// Use sparingly — only where you want window-move behavior, not under interactive controls.
+struct WindowDragArea: NSViewRepresentable {
+    final class DragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+    }
+    func makeNSView(context: Context) -> NSView { DragView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+struct VisualEffectView: NSViewRepresentable {
+    var material: NSVisualEffectView.Material = .hudWindow
+    var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        view.isEmphasized = true
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
+    }
+}
+
+extension View {
+    // Real Liquid Glass surface (macOS 26+). Clips contents to the shape so
+    // child backgrounds don't square off the corners.
+    func glassPanel(cornerRadius: CGFloat = 22) -> some View {
+        self
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
 
 // Cache to prevent loading thumbnails repeatedly
 class ImageCache {
@@ -91,95 +171,155 @@ struct ContentView: View {
     @State private var nameFilter: String = ""
     
     var body: some View {
-        HStack(spacing: 0) {
-            // Left sidebar: Folder & Image List
-            VStack(spacing: 0) {
-                folderHeader
-                
-                filterBar
-                
-                if isLoadingImages {
-                    Spacer()
-                    ProgressView("Loading folder images...")
-                    Spacer()
-                } else if images.isEmpty {
-                    Spacer()
-                    VStack(spacing: 12) {
-                        Image(systemName: "photo.on.rectangle")
-                            .font(.system(size: 48))
-                            .foregroundColor(.gray)
-                        Text(selectedDirectory == nil ? "Select a folder to begin" : "No images found in this folder")
-                            .font(.headline)
-                            .foregroundColor(.gray)
-                        Button(action: selectFolder) {
-                            Text("Open Folder")
-                        }
+        ZStack {
+            // Dark photography-app backdrop
+            Color(red: 0.07, green: 0.07, blue: 0.08)
+                .ignoresSafeArea()
+
+            HStack(spacing: 0) {
+                // Left floating glass panel — offset 12pt from window edges
+                leftPanel
+                    .frame(width: 320)
+                    .padding(.leading, 12)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+
+                // Center: bare preview, no container
+                centerArea
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+
+                // Right: fixed (non-floating) settings panel attached to window edge
+                rightPanel
+                    .frame(width: 320)
+            }
+            .ignoresSafeArea(.all, edges: .top)
+        }
+        .frame(minWidth: 1100, minHeight: 700)
+        .onAppear(perform: initializeApp)
+    }
+
+    private var leftPanel: some View {
+        VStack(spacing: 0) {
+            // Traffic-light space + drag region (folder header now lives in the center pane)
+            ZStack(alignment: .topLeading) {
+                WindowDragArea()
+                    .frame(height: 32)
+            }
+
+            filterBar
+
+            if isLoadingImages {
+                Spacer()
+                ProgressView("Loading folder images...")
+                Spacer()
+            } else if images.isEmpty {
+                Spacer()
+                VStack(spacing: 12) {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.system(size: 48))
+                        .foregroundColor(.gray)
+                    Text(selectedDirectory == nil ? "Select a folder to begin" : "No images found in this folder")
+                        .font(.headline)
+                        .foregroundColor(.gray)
+                    Button(action: selectFolder) {
+                        Text("Open Folder")
                     }
-                    Spacer()
-                } else {
-                    imageList
-                    selectionHelpers
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.large)
                 }
+                Spacer()
+            } else {
+                imageList
+                selectionHelpers
             }
-            .frame(width: 350)
-            
-            Divider()
-            
-            // Middle: Live Print Preview Canvas
-            VStack(spacing: 0) {
-                previewCanvas
-                
-                if !autoBatchedPages.isEmpty {
-                    batchPagerControls
-                }
-                
-                spaceUsageBanner
+        }
+        .glassPanel()
+    }
+
+    private var centerArea: some View {
+        VStack(spacing: 12) {
+            // Top bar: folder source on the left, drag-able region filling the rest
+            ZStack(alignment: .leading) {
+                WindowDragArea()
+                    .frame(height: 60)
+                folderHeader
+                    .frame(maxWidth: 320, alignment: .leading)
             }
-            .background(Color(NSColor.windowBackgroundColor))
-            
-            Divider()
-            
-            // Right Sidebar: Settings & Action Panel
-            VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        Text("Print Settings")
-                            .font(.headline)
-                            .padding(.top, 16)
-                            .padding(.horizontal)
-                        
-                        Divider()
-                            .padding(.horizontal)
-                        
+
+            previewCanvas
+
+            if !autoBatchedPages.isEmpty {
+                batchPagerControls
+            }
+
+            spaceUsageBanner
+        }
+    }
+
+    private var rightPanel: some View {
+        VStack(spacing: 0) {
+            // Drag region at the very top of the right panel
+            WindowDragArea().frame(height: 28)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Print Settings")
+                        .font(.headline)
+                        .padding(.top, 4)
+                        .padding(.horizontal)
+                        .padding(.bottom, 14)
+
+                    VStack(alignment: .leading, spacing: 24) {
                         printerSelectionSection
-                        
                         paperSettingsSection
-                        
+                        resolutionSection
                         imageSettingsSection
                     }
                 }
-                
-                Spacer()
-                
-                Divider()
-                
-                actionsSection
+                .padding(.bottom, 16)
             }
-            .frame(width: 350)
+
+            actionsSection
         }
-        .frame(minWidth: 1000, minHeight: 650)
-        .onAppear(perform: initializeApp)
+        .frame(maxHeight: .infinity)
+        .background(
+            Color(red: 0.11, green: 0.11, blue: 0.12)
+                .ignoresSafeArea()
+        )
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(width: 0.5)
+        }
+    }
+
+    private var windowTitle: String {
+        if let dir = selectedDirectory {
+            return "PhotoPrint — \(dir.path)"
+        }
+        return "PhotoPrint"
     }
     
     // MARK: - Subviews
     
     private var folderHeader: some View {
-        HStack {
+        HStack(spacing: 12) {
+            Button(action: selectFolder) {
+                Image(systemName: "folder.badge.plus")
+                    .imageScale(.large)
+            }
+            .buttonStyle(.glass)
+            .help("Choose image directory")
+
             VStack(alignment: .leading, spacing: 4) {
-                Text("Folder Source")
-                    .font(.caption)
+                Text("FOLDER SOURCE")
+                    .font(.caption2)
                     .fontWeight(.bold)
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
+                    .tracking(0.6)
                 if let dir = selectedDirectory {
                     Text(dir.lastPathComponent)
                         .font(.body)
@@ -189,40 +329,36 @@ struct ContentView: View {
                     Text("None Selected")
                         .font(.body)
                         .italic()
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                 }
             }
             Spacer()
-            Button(action: selectFolder) {
-                Image(systemName: "folder.badge.plus")
-                    .imageScale(.large)
-            }
-            .buttonStyle(.plain)
-            .help("Choose image directory")
         }
-        .padding()
-        .background(Color(NSColor.controlBackgroundColor))
+        .padding(16)
     }
-    
+
     private var filterBar: some View {
-        HStack {
+        let isDisabled = selectedDirectory == nil
+        return HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(.gray)
+                .foregroundColor(.secondary)
             TextField("Search images...", text: $nameFilter)
                 .textFieldStyle(.plain)
+                .disabled(isDisabled)
             if !nameFilter.isEmpty {
                 Button(action: { nameFilter = "" }) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(6)
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-        .cornerRadius(6)
-        .padding(.horizontal)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .glassEffect(.regular, in: Capsule(style: .continuous))
+        .opacity(isDisabled ? 0.45 : 1.0)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
     
     private var imageList: some View {
@@ -230,7 +366,7 @@ struct ContentView: View {
             let filtered = images.filter {
                 nameFilter.isEmpty ? true : $0.name.localizedCaseInsensitiveContains(nameFilter)
             }
-            
+
             ForEach(filtered) { img in
                 ImageRow(
                     img: img,
@@ -238,41 +374,62 @@ struct ContentView: View {
                     wouldFit: LayoutEngine.wouldFit(img: img, selected: selectedImages, config: config),
                     onToggle: { toggleImageSelection(img) }
                 )
-                .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
+        .padding(.horizontal, 8)
     }
-    
+
     private var selectionHelpers: some View {
-        HStack(spacing: 8) {
-            Button(action: selectAllRedTags) {
-                HStack {
-                    Circle().fill(Color.red).frame(width: 8, height: 8)
-                    Text("Select Red")
+        HStack(spacing: 3) {
+            Menu {
+                ForEach(["Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"], id: \.self) { tag in
+                    Button(action: { addImagesByTag(tag) }) {
+                        Image(nsImage: finderTagSwatch(tag))
+                        Text("\(tag) tag")
+                    }
+                    .disabled(!images.contains { $0.tag == tag && !$0.isPrinted && !$0.isSelected })
                 }
+            } label: {
+                Text("Add by...")
             }
+            .menuStyle(.button)
+            .buttonStyle(.glass)
+            .fixedSize()
             .disabled(images.isEmpty)
-            
-            Button("Clear All") {
-                images = images.map {
-                    var img = $0
-                    img.isSelected = false
-                    return img
-                }
-                clearBatch()
-            }
-            .disabled(selectedImages.isEmpty)
-            
+
             Spacer()
-            
-            Button(action: autoBatchAll) {
-                Text("Auto-Batch")
-                    .fontWeight(.semibold)
+
+            HStack(spacing: 4) {
+                Button(action: autoBatchAll) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.grid.3x3.fill")
+                        Text("Auto")
+                            .fontWeight(.semibold)
+                    }
+                }
+                .buttonStyle(.glassProminent)
+                .disabled(images.filter { !$0.isPrinted }.isEmpty)
+
+                Button("Clear") {
+                    images = images.map {
+                        var img = $0
+                        img.isSelected = false
+                        return img
+                    }
+                    clearBatch()
+                }
+                .buttonStyle(.glass)
+                .disabled(selectedImages.isEmpty)
             }
-            .disabled(images.filter { !$0.isPrinted }.isEmpty)
         }
-        .padding(12)
-        .background(Color(NSColor.controlBackgroundColor))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
     
     private var previewCanvas: some View {
@@ -300,177 +457,276 @@ struct ContentView: View {
     }
     
     private var batchPagerControls: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 14) {
+            Button(action: firstBatchPage) {
+                Image(systemName: "chevron.left.2")
+                    .imageScale(.large)
+            }
+            .buttonStyle(.plain)
+            .disabled(currentBatchPageIndex == 0)
+
             Button(action: prevBatchPage) {
                 Image(systemName: "chevron.left")
                     .imageScale(.large)
             }
+            .buttonStyle(.plain)
             .disabled(currentBatchPageIndex == 0)
-            
-            Text("Page \(currentBatchPageIndex + 1) of \(autoBatchedPages.count)")
-                .font(.headline)
-                .frame(minWidth: 100)
-            
+
+            Menu {
+                ForEach(autoBatchedPages.indices, id: \.self) { idx in
+                    Button("Page \(idx + 1) of \(autoBatchedPages.count)") {
+                        jumpToBatchPage(idx)
+                    }
+                    .disabled(idx == currentBatchPageIndex)
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text("Page \(currentBatchPageIndex + 1) of \(autoBatchedPages.count)")
+                        .font(.headline)
+                    Image(systemName: "chevron.down")
+                        .imageScale(.small)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(minWidth: 140)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .fixedSize()
+
             Button(action: nextBatchPage) {
                 Image(systemName: "chevron.right")
                     .imageScale(.large)
             }
+            .buttonStyle(.plain)
+            .disabled(currentBatchPageIndex >= autoBatchedPages.count - 1)
+
+            Button(action: lastBatchPage) {
+                Image(systemName: "chevron.right.2")
+                    .imageScale(.large)
+            }
+            .buttonStyle(.plain)
             .disabled(currentBatchPageIndex >= autoBatchedPages.count - 1)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 16)
-        .background(Capsule().fill(Color(NSColor.controlBackgroundColor)))
-        .padding(.bottom, 12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 22)
+        .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
     }
-    
+
     private var spaceUsageBanner: some View {
         VStack(spacing: 4) {
             if let layout = currentLayout {
-                HStack {
-                    let used = layout.totalH
-                    let pct = min(1.0, used / config.paperH)
-                    
-                    ProgressView(value: pct)
-                        .accentColor(pct > 0.95 ? .red : pct > 0.75 ? .orange : .green)
-                        .frame(maxWidth: 300)
-                    
-                    Text("\(used, specifier: "%.2f")\" used")
-                        .fontWeight(.bold)
-                    Text("/ \(config.paperH, specifier: "%.2f")\" height")
-                        .foregroundColor(.gray)
-                    Spacer()
+                let used = layout.totalH
+                let pct = min(1.0, used / config.paperH)
+
+                HStack(spacing: 0) {
+                    // Left: Grid chip
                     Text("Grid: \(layout.rows.map { "\($0.count)" }.joined(separator: "+")) (\(layout.orientation))")
                         .font(.caption)
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Color.cyan.opacity(0.15))
-                        .cornerRadius(4)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.cyan.opacity(0.18))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(Color.cyan.opacity(0.4), lineWidth: 0.5)
+                        )
                         .foregroundColor(.cyan)
+
+                    // Middle: progress bar filling remaining space with 48pt margins
+                    ProgressView(value: pct)
+                        .progressViewStyle(.linear)
+                        .tint(pct > 0.95 ? .red : pct > 0.75 ? .orange : .green)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 48)
+
+                    // Right: used/height indicator
+                    HStack(spacing: 4) {
+                        Text("\(used, specifier: "%.2f")\" used")
+                            .fontWeight(.semibold)
+                        Text("/ \(config.paperH, specifier: "%.2f")\" height")
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .font(.subheadline)
-                .padding(.horizontal)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color(NSColor.controlBackgroundColor))
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }
     }
     
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .fontWeight(.medium)
+            .foregroundStyle(.secondary)
+    }
+
+    // A popup-style dropdown that actually fills its container's width.
+    private func dropdown<T: Hashable>(
+        selection: Binding<T>,
+        options: [T],
+        label: @escaping (T) -> String,
+        placeholder: String = "—"
+    ) -> some View {
+        Menu {
+            ForEach(options, id: \.self) { opt in
+                Button(label(opt)) { selection.wrappedValue = opt }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(options.isEmpty ? placeholder : label(selection.wrappedValue))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down")
+                    .imageScale(.small)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.6)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func fieldRow<V: View>(_ label: String, @ViewBuilder content: () -> V) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            fieldLabel(label)
+            content()
+        }
+    }
+
     private var printerSelectionSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Printer")
-                .font(.subheadline)
-                .fontWeight(.bold)
-            
-            Picker("Select Printer", selection: $config.printer) {
-                if availablePrinters.isEmpty {
-                    Text("Searching...").tag("")
-                } else {
-                    ForEach(availablePrinters, id: \.self) { p in
-                        Text(p).tag(p)
-                    }
+        VStack(alignment: .leading, spacing: 24) {
+            fieldRow("Printer") {
+                dropdown(
+                    selection: $config.printer,
+                    options: availablePrinters,
+                    label: { $0 },
+                    placeholder: "Searching..."
+                )
+                .onChange(of: config.printer) { _, newPrinter in
+                    queryPrinterOptions(printer: newPrinter)
+                    clearBatch()
                 }
             }
-            .labelsHidden()
-            .onChange(of: config.printer) { _, newPrinter in
-                queryPrinterOptions(printer: newPrinter)
-                clearBatch()
-            }
-            
+
             if !availableMediaTypes.isEmpty {
-                Text("Media Type")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                    .padding(.top, 4)
-                
-                Picker("Media Type", selection: $config.mediaType) {
-                    ForEach(availableMediaTypes, id: \.self) { m in
-                        Text(friendlyMediaName(m)).tag(m)
-                    }
+                fieldRow("Media Type") {
+                    dropdown(
+                        selection: $config.mediaType,
+                        options: availableMediaTypes,
+                        label: { friendlyMediaName($0) }
+                    )
                 }
-                .labelsHidden()
             }
-            
+
             if !availableInputSlots.isEmpty {
-                Text("Input Tray")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                    .padding(.top, 4)
-                
-                Picker("Input Tray", selection: $config.inputSlot) {
-                    ForEach(availableInputSlots, id: \.self) { s in
-                        Text(s).tag(s)
-                    }
+                fieldRow("Input Tray") {
+                    dropdown(
+                        selection: $config.inputSlot,
+                        options: availableInputSlots,
+                        label: { $0 }
+                    )
                 }
-                .labelsHidden()
             }
         }
         .padding(.horizontal)
     }
-    
+
     private var paperSettingsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Paper Size")
-                .font(.subheadline)
-                .fontWeight(.bold)
-            
-            Picker("Preset", selection: $selectedPreset) {
-                ForEach(PaperPreset.presets) { preset in
-                    Text(preset.label).tag(preset)
+        VStack(alignment: .leading, spacing: 24) {
+            fieldRow("Paper Size") {
+                dropdown(
+                    selection: $selectedPreset,
+                    options: PaperPreset.presets,
+                    label: { $0.label }
+                )
+                .onChange(of: selectedPreset) { _, preset in
+                    if preset.label != "Custom" {
+                        config.paperW = preset.w
+                        config.paperH = preset.h
+                        config.cupsPaperSize = preset.cups
+                    } else {
+                        updateCustomPaperValues()
+                    }
+                    clearBatch()
                 }
             }
-            .labelsHidden()
-            .onChange(of: selectedPreset) { _, preset in
-                if preset.label != "Custom" {
-                    config.paperW = preset.w
-                    config.paperH = preset.h
-                    config.cupsPaperSize = preset.cups
-                } else {
-                    updateCustomPaperValues()
-                }
-                clearBatch()
-            }
-            
+
             if selectedPreset.label == "Custom" {
                 HStack(spacing: 12) {
-                    VStack(alignment: .leading) {
-                        Text("Width (in)").font(.caption).foregroundColor(.gray)
+                    fieldRow("Width (in)") {
                         TextField("W", text: $customW)
                             .textFieldStyle(.roundedBorder)
                             .onChange(of: customW) { _, _ in updateCustomPaperValues() }
                     }
-                    VStack(alignment: .leading) {
-                        Text("Height (in)").font(.caption).foregroundColor(.gray)
+                    fieldRow("Height (in)") {
                         TextField("H", text: $customH)
                             .textFieldStyle(.roundedBorder)
                             .onChange(of: customH) { _, _ in updateCustomPaperValues() }
                     }
                 }
-                .padding(.top, 4)
             }
         }
         .padding(.horizontal)
     }
-    
+
+    private var resolutionSection: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            fieldRow("Print Resolution") {
+                dropdown(
+                    selection: $config.dpi,
+                    options: [150, 240, 300, 360, 600],
+                    label: { "\(Int($0)) DPI" }
+                )
+                .onChange(of: config.dpi) { _, _ in clearBatch() }
+            }
+        }
+        .padding(.horizontal)
+    }
+
     private var imageSettingsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Image Scale")
-                .font(.subheadline)
-                .fontWeight(.bold)
-            
-            HStack {
-                Text("Longer edge:")
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 4) {
+                fieldLabel("Image Size (longer edge)")
                 Spacer()
-                Text("\(config.longerDim, specifier: "%.1f") inches")
-                    .fontWeight(.bold)
+                TextField("", value: Binding(
+                    get: { Double(config.longerDim) },
+                    set: { config.longerDim = CGFloat($0) }
+                ), format: .number.precision(.fractionLength(1)))
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .fontWeight(.semibold)
+                    .frame(width: 50)
+                    .onChange(of: config.longerDim) { _, _ in clearBatch() }
+                Text("inches")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            .font(.subheadline)
-            
-            Slider(value: $config.longerDim, in: 2.0...18.0, step: 0.5) {
-                Text("Image Size")
-            }
-            .onChange(of: config.longerDim) { _, _ in
-                clearBatch()
-            }
+
+            Slider(value: $config.longerDim, in: 2.0...18.0, step: 0.5)
+                .labelsHidden()
+                .onChange(of: config.longerDim) { _, _ in
+                    clearBatch()
+                }
         }
         .padding(.horizontal)
     }
@@ -480,31 +736,34 @@ struct ContentView: View {
             if let msg = printStatusMessage {
                 Text(msg)
                     .font(.caption)
-                    .foregroundColor(showPrintSuccess ? .green : (showPrintFailed ? .red : .gray))
+                    .foregroundColor(showPrintSuccess ? .green : (showPrintFailed ? .red : .secondary))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
                     .padding(.top, 8)
             }
-            
-            HStack(spacing: 12) {
+
+            HStack(spacing: 10) {
                 if !autoBatchedPages.isEmpty {
                     Button(action: printAllBatchPages) {
                         if isPrinting {
                             ProgressView().scaleEffect(0.5)
+                                .frame(maxWidth: .infinity)
                         } else {
                             Text("Print All Pages")
                                 .fontWeight(.semibold)
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.large)
                     .tint(.blue)
                     .disabled(isPrinting)
                 }
-                
+
                 Button(action: printCurrentPage) {
                     if isPrinting && autoBatchedPages.isEmpty {
                         ProgressView().scaleEffect(0.5)
+                            .frame(maxWidth: .infinity)
                     } else {
                         let btnLabel = autoBatchedPages.isEmpty ? "Print Current Page" : "Print This Page"
                         Text(btnLabel)
@@ -512,13 +771,15 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
+                .controlSize(.large)
                 .tint(autoBatchedPages.isEmpty ? .blue : .gray)
                 .disabled(isPrinting || (!autoBatchedPages.isEmpty && autoBatchedPages.isEmpty) || (autoBatchedPages.isEmpty && selectedImages.isEmpty))
             }
-            .padding()
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 20)
         }
-        .background(Color(NSColor.windowBackgroundColor))
     }
     
     // MARK: - Computed Properties
@@ -556,6 +817,10 @@ struct ContentView: View {
         return list
     }
     
+    private func tagColor(_ tag: String) -> Color {
+        finderTagColor(tag)
+    }
+
     private func friendlyMediaName(_ systemName: String) -> String {
         let mapping = [
             "photographic": "Photo Glossy/Lustre",
@@ -568,15 +833,17 @@ struct ContentView: View {
     
     // MARK: - Handlers & API Calls
     
+    private static let lastFolderKey = "PhotoPrint.lastFolderPath"
+
     private func initializeApp() {
-        // Find default project directory
-        let defaultPath = "/Users/dan/Projects/photoprint"
-        let url = URL(fileURLWithPath: defaultPath)
-        if FileManager.default.fileExists(atPath: defaultPath) {
+        // Restore the most recently opened folder, if it still exists.
+        if let saved = UserDefaults.standard.string(forKey: Self.lastFolderKey),
+           FileManager.default.fileExists(atPath: saved) {
+            let url = URL(fileURLWithPath: saved)
             selectedDirectory = url
             loadImages(from: url)
         }
-        
+
         // Load printers list
         DispatchQueue.global(qos: .userInitiated).async {
             let printers = PrinterManager.getPrinters()
@@ -589,15 +856,19 @@ struct ContentView: View {
             }
         }
     }
-    
+
     private func selectFolder() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        
+        if let current = selectedDirectory {
+            panel.directoryURL = current
+        }
+
         if panel.runModal() == .OK, let url = panel.url {
             selectedDirectory = url
+            UserDefaults.standard.set(url.path, forKey: Self.lastFolderKey)
             loadImages(from: url)
         }
     }
@@ -698,27 +969,17 @@ struct ContentView: View {
         }
     }
     
-    private func selectAllRedTags() {
+    private func addImagesByTag(_ tag: String) {
         clearBatch()
-        
-        let redImgs = images.filter { $0.tag == "Red" && !$0.isPrinted }
-        let allRedSelected = !redImgs.isEmpty && redImgs.allSatisfy { $0.isSelected }
-        
-        // Deselect if all are selected, otherwise add as many as fit
-        if allRedSelected {
-            images = images.map {
-                var item = $0
-                if item.tag == "Red" { item.isSelected = false }
-                return item
-            }
-        } else {
-            var selected = selectedImages
-            for redImg in redImgs {
-                if !redImg.isSelected && LayoutEngine.wouldFit(img: redImg, selected: selected, config: config) {
-                    if let idx = images.firstIndex(where: { $0.id == redImg.id }) {
-                        images[idx].isSelected = true
-                        selected.append(images[idx])
-                    }
+
+        let candidates = images.filter { $0.tag == tag && !$0.isPrinted && !$0.isSelected }
+        var selected = selectedImages
+
+        for img in candidates {
+            if LayoutEngine.wouldFit(img: img, selected: selected, config: config) {
+                if let idx = images.firstIndex(where: { $0.id == img.id }) {
+                    images[idx].isSelected = true
+                    selected.append(images[idx])
                 }
             }
         }
@@ -779,6 +1040,25 @@ struct ContentView: View {
         currentBatchPageIndex -= 1
         syncSelectionToCurrentPage()
     }
+
+    private func firstBatchPage() {
+        guard !autoBatchedPages.isEmpty, currentBatchPageIndex != 0 else { return }
+        currentBatchPageIndex = 0
+        syncSelectionToCurrentPage()
+    }
+
+    private func lastBatchPage() {
+        let last = autoBatchedPages.count - 1
+        guard last >= 0, currentBatchPageIndex != last else { return }
+        currentBatchPageIndex = last
+        syncSelectionToCurrentPage()
+    }
+
+    private func jumpToBatchPage(_ idx: Int) {
+        guard idx >= 0, idx < autoBatchedPages.count, idx != currentBatchPageIndex else { return }
+        currentBatchPageIndex = idx
+        syncSelectionToCurrentPage()
+    }
     
     private func syncSelectionToCurrentPage() {
         let pageIds = Set(autoBatchedPages[currentBatchPageIndex].map { $0.id })
@@ -801,13 +1081,14 @@ struct ContentView: View {
         guard !imagesToPrint.isEmpty else { return }
         
         isPrinting = true
-        printStatusMessage = "Compositing image at 300 DPI..."
+        printStatusMessage = "Compositing image at \(Int(config.dpi)) DPI..."
         showPrintSuccess = false
         showPrintFailed = false
-        
+
+        let dpi = self.config.dpi
         DispatchQueue.global(qos: .userInitiated).async {
             guard let layout = LayoutEngine.calculateLayout(images: imagesToPrint, config: self.config),
-                  let compositeCgImage = ImageCompositor.buildComposite(images: imagesToPrint, config: self.config, layout: layout, dpi: 300.0, useThumbnails: false) else {
+                  let compositeCgImage = ImageCompositor.buildComposite(images: imagesToPrint, config: self.config, layout: layout, dpi: dpi, useThumbnails: false) else {
                 DispatchQueue.main.async {
                     self.isPrinting = false
                     self.printStatusMessage = "Compositing failed."
@@ -815,13 +1096,13 @@ struct ContentView: View {
                 }
                 return
             }
-            
+
             // Save to temporary TIFF file
             let tempDir = FileManager.default.temporaryDirectory
             let tempFilename = "photoprint_\(Int(Date().timeIntervalSince1970)).tiff"
             let tempUrl = tempDir.appendingPathComponent(tempFilename)
-            
-            guard ImageCompositor.saveTIFF(cgImage: compositeCgImage, to: tempUrl) else {
+
+            guard ImageCompositor.saveTIFF(cgImage: compositeCgImage, to: tempUrl, dpi: dpi) else {
                 DispatchQueue.main.async {
                     self.isPrinting = false
                     self.printStatusMessage = "Failed to save TIFF composite."
@@ -888,26 +1169,27 @@ struct ContentView: View {
         
         let pagesToPrint = autoBatchedPages
         
+        let dpi = self.config.dpi
         DispatchQueue.global(qos: .userInitiated).async {
             var successCount = 0
             var failedCount = 0
-            
+
             for (index, pageImages) in pagesToPrint.enumerated() {
                 DispatchQueue.main.async {
-                    self.printStatusMessage = "Compositing page \(index + 1) of \(pagesToPrint.count)..."
+                    self.printStatusMessage = "Compositing page \(index + 1) of \(pagesToPrint.count) at \(Int(dpi)) DPI..."
                 }
-                
+
                 guard let layout = LayoutEngine.calculateLayout(images: pageImages, config: self.config),
-                      let compositeCgImage = ImageCompositor.buildComposite(images: pageImages, config: self.config, layout: layout, dpi: 300.0, useThumbnails: false) else {
+                      let compositeCgImage = ImageCompositor.buildComposite(images: pageImages, config: self.config, layout: layout, dpi: dpi, useThumbnails: false) else {
                     failedCount += 1
                     continue
                 }
-                
+
                 let tempDir = FileManager.default.temporaryDirectory
                 let tempFilename = "photoprint_batch_\(index)_\(Int(Date().timeIntervalSince1970)).tiff"
                 let tempUrl = tempDir.appendingPathComponent(tempFilename)
-                
-                guard ImageCompositor.saveTIFF(cgImage: compositeCgImage, to: tempUrl) else {
+
+                guard ImageCompositor.saveTIFF(cgImage: compositeCgImage, to: tempUrl, dpi: dpi) else {
                     failedCount += 1
                     continue
                 }
@@ -1036,24 +1318,24 @@ struct ImageRow: View {
             }
         }
         .padding(.vertical, 6)
-        .opacity(img.isPrinted ? 0.6 : (img.isSelected ? 1.0 : (wouldFit ? 1.0 : 0.4)))
-        .contentShape(Rectangle())
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(img.isSelected ? Color.accentColor.opacity(0.18) : Color.white.opacity(0.001))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(img.isSelected ? Color.accentColor.opacity(0.45) : Color.white.opacity(0.08), lineWidth: 0.6)
+        )
+        .opacity(img.isPrinted ? 0.55 : (img.isSelected ? 1.0 : (wouldFit ? 1.0 : 0.4)))
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onTapGesture {
             onToggle()
         }
     }
     
     private func finderColor(_ tag: String) -> Color {
-        switch tag {
-        case "Red": return .red
-        case "Orange": return .orange
-        case "Yellow": return .yellow
-        case "Green": return .green
-        case "Blue": return .blue
-        case "Purple": return .purple
-        case "Gray": return .gray
-        default: return .gray
-        }
+        finderTagColor(tag)
     }
 }
 
@@ -1074,15 +1356,20 @@ struct PrintPreviewView: View {
                 Image(nsImage: img)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 6)
-                    .padding()
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.8)
+                    )
+                    .shadow(color: Color.black.opacity(0.25), radius: 20, x: 0, y: 10)
+                    .padding(20)
             } else {
                 VStack(spacing: 16) {
                     Image(systemName: "photo.on.rectangle")
                         .font(.system(size: 48))
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                     Text("No Layout Preview")
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -1098,17 +1385,24 @@ struct PrintPreviewView: View {
         }
         
         isGenerating = true
+        // Render at the display's physical pixel density so the preview is crisp on Retina.
+        // Cap at 144 (2x) so big sheets don't blow up memory/CPU.
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let previewDPI: CGFloat = min(144, 72 * scale)
         DispatchQueue.global(qos: .userInitiated).async {
             guard let layout = LayoutEngine.calculateLayout(images: images, config: config),
-                  let cgImg = ImageCompositor.buildComposite(images: images, config: config, layout: layout, dpi: 72.0, useThumbnails: true) else {
+                  let cgImg = ImageCompositor.buildComposite(images: images, config: config, layout: layout, dpi: previewDPI, useThumbnails: true) else {
                 DispatchQueue.main.async {
                     self.previewImage = nil
                     self.isGenerating = false
                 }
                 return
             }
-            
-            let nsImg = NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
+
+            // Hand the NSImage its logical (point) size, not pixel size, so SwiftUI lays it out
+            // at the right scale while keeping the extra pixels for Retina rendering.
+            let pointSize = NSSize(width: CGFloat(cgImg.width) / scale, height: CGFloat(cgImg.height) / scale)
+            let nsImg = NSImage(cgImage: cgImg, size: pointSize)
             DispatchQueue.main.async {
                 self.previewImage = nsImg
                 self.isGenerating = false

@@ -19,6 +19,7 @@ cp Info.plist "$CONTENTS_DIR/Info.plist"
 
 echo "⚙️ Compiling Swift files..."
 swiftc -parse-as-library -O \
+  -target arm64-apple-macos26.0 \
   -o "$MACOS_DIR/PhotoPrint" \
   PhotoPrintApp.swift \
   Models.swift \
