@@ -191,12 +191,12 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
             HStack(spacing: 0) {
-                // Left floating glass panel — offset 6pt from window edges
+                // Left floating glass panel — offset 8pt from window edges
                 leftPanel
                     .frame(width: 320)
-                    .padding(.leading, 6)
-                    .padding(.top, 6)
-                    .padding(.bottom, 6)
+                    .padding(.leading, 8)
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
 
                 // Center: bare preview, no container
                 centerArea
@@ -261,7 +261,7 @@ struct ContentView: View {
                 selectionHelpers
             }
         }
-        .glassPanel(cornerRadius: 21)
+        .glassPanel(cornerRadius: 19)
     }
 
     private var centerArea: some View {
