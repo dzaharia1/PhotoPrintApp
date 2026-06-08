@@ -229,8 +229,8 @@ struct ContentView: View {
                 WindowDragArea()
                     .frame(height: 38)
                 WindowControls()
-                    .padding(.leading, 8)
-                    .padding(.top, 8)
+                    .padding(.leading, 6)
+                    .padding(.top, 6)
             }
 
             filterBar
