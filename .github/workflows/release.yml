@@ -12,11 +12,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Application
-        run: |
-          chmod +x build.sh
-          ./build.sh
-
       - name: Compress App Bundle
         run: zip -r PhotoPrint.zip PhotoPrint.app
 
