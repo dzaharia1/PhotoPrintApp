@@ -284,23 +284,20 @@ struct ContentView: View {
             ZStack {
                 WindowDragArea()
                     .frame(height: 60)
-                HStack {
+                HStack(spacing: 16) {
                     folderHeader
                         .frame(maxWidth: 320, alignment: .leading)
                     Spacer()
+                    zoomControls
                     themeMenuButton
-                        .padding(.trailing, 16)
                 }
+                .padding(.horizontal, 4)
             }
 
             previewCanvas
 
-            // Bottom controls stack
-            VStack(spacing: 8) {
-                zoomControls
-                if !autoBatchedPages.isEmpty {
-                    batchPagerControls
-                }
+            if !autoBatchedPages.isEmpty {
+                batchPagerControls
             }
 
             spaceUsageBanner
@@ -382,7 +379,8 @@ struct ContentView: View {
             }
             Spacer()
         }
-        .padding(16)
+        .padding(.vertical, 16)
+        .padding(.trailing, 16)
     }
 
     private var themeMenuButton: some View {
@@ -478,7 +476,7 @@ struct ContentView: View {
                     .disabled(!images.contains { $0.tag == tag && !$0.isPrinted && !$0.isSelected })
                 }
             } label: {
-                Text("Add by...")
+                Text("Tag select...")
             }
             .menuStyle(.button)
             .buttonStyle(.glass)
@@ -512,11 +510,11 @@ struct ContentView: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.bottom, 8)
+        .padding(.vertical, 16)
     }
     
     private var zoomControls: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 8) {
             Button(action: {
                 withAnimation(.easeOut(duration: 0.15)) {
                     zoomScale = max(1.0, zoomScale - 0.25)
@@ -526,13 +524,26 @@ struct ContentView: View {
                 }
             }) {
                 Image(systemName: "magnifyingglass.minus")
-                    .imageScale(.large)
+                    .imageScale(.medium)
             }
             .buttonStyle(.plain)
             .disabled(zoomScale <= 1.0)
 
+            if zoomScale > 1.0 {
+                Button(action: {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        zoomScale = 1.0
+                        panOffset = .zero
+                    }
+                }) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .imageScale(.medium)
+                }
+                .buttonStyle(.plain)
+            }
+
             Slider(value: $zoomScale, in: 1.0...4.0)
-                .frame(width: 150)
+                .frame(width: 100)
                 .labelsHidden()
                 .onChange(of: zoomScale) { _, newScale in
                     if newScale == 1.0 {
@@ -546,30 +557,11 @@ struct ContentView: View {
                 }
             }) {
                 Image(systemName: "magnifyingglass.plus")
-                    .imageScale(.large)
+                    .imageScale(.medium)
             }
             .buttonStyle(.plain)
             .disabled(zoomScale >= 4.0)
-
-            Text("\(Int(zoomScale * 100))%")
-                .font(.system(.body, design: .monospaced))
-                .frame(width: 50, alignment: .trailing)
-                
-            Button("Reset") {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    zoomScale = 1.0
-                    panOffset = .zero
-                }
-            }
-            .buttonStyle(.glass)
-            .disabled(zoomScale == 1.0)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 16)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color(NSColor.windowBackgroundColor))
-        )
     }
 
     private var previewCanvas: some View {
@@ -659,7 +651,7 @@ struct ContentView: View {
                 let used = layout.totalH
                 let pct = min(1.0, used / config.paperH)
 
-                HStack(spacing: 0) {
+                HStack(spacing: 8) {
                     // Left: Grid chip
                     Text("Grid: \(layout.rows.map { "\($0.count)" }.joined(separator: "+")) (\(layout.orientation))")
                         .font(.caption)
@@ -675,12 +667,11 @@ struct ContentView: View {
                         )
                         .foregroundColor(.cyan)
 
-                    // Middle: progress bar filling remaining space with 48pt margins
+                    // Middle: progress bar filling remaining space
                     ProgressView(value: pct)
                         .progressViewStyle(.linear)
                         .tint(pct > 0.95 ? .red : pct > 0.75 ? .orange : .green)
                         .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 48)
 
                     // Right: used/height indicator
                     HStack(spacing: 4) {
@@ -694,6 +685,7 @@ struct ContentView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.horizontal, 4)
             }
         }
     }
