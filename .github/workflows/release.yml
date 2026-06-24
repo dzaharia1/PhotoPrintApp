@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Compress App Bundle
-        run: zip -r PhotoPrint.zip PhotoPrint.app
+        run: ditto -c -k --keepParent PhotoPrint.app PhotoPrint.zip
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

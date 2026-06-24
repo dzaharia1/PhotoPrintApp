@@ -13,7 +13,15 @@ open PhotoPrint.app
 
 `build.sh` lists every source file explicitly in its `swiftc` invocation — **when you add a new `.swift` file you must add it to the compile line in `build.sh`**, or it won't be included. Files are compiled with `-parse-as-library -O`. There is no test suite, linter, or package manager.
 
-Releases are automated: pushing a `v*` tag (e.g. `v1.0.0`) triggers `.github/workflows/*.yml`, which zips the committed `PhotoPrint.app` bundle and publishes a GitHub Release. The built `PhotoPrint.app` bundle is intentionally committed to the repo for this reason.
+Releases are built, notarized, and tagged locally before pushing:
+1. Run `./build-release.sh <version>` (e.g., `./build-release.sh 1.0.12`). This compiles, signs (with Hardened Runtime), notarizes via Apple Notary Service, staples the notarization ticket, and stages the changes (`PhotoPrint.app` and `Info.plist`) in Git.
+2. Commit, tag, and push:
+   ```bash
+   git commit -m "Release v1.0.12"
+   git tag v1.0.12
+   git push origin main v1.0.12
+   ```
+Pushing the `v*` tag triggers `.github/workflows/release.yml`, which packages the committed and notarized `PhotoPrint.app` bundle and attaches it as a GitHub Release asset. The built app bundle is intentionally committed to the repo for this reason.
 
 ## Platform note
 

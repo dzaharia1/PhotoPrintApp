@@ -50,6 +50,24 @@ Upon successful compilation, `PhotoPrint.app` will be created in the project roo
 open PhotoPrint.app
 ```
 
+## Creating a Release (with Notarization)
+
+To build, sign, notarize, and publish a release:
+
+1. Ensure your Apple Developer certificate and Apple ID/App Store Connect credentials are set up.
+2. Run the release script with the new version (e.g., `1.0.12`):
+   ```bash
+   ./build-release.sh 1.0.12
+   ```
+   This script updates `Info.plist`, compiles the app, signs it with the **Developer ID Application** certificate, submits it for Apple notarization, staples the approved ticket, and stages all modified files.
+3. Commit, tag, and push to GitHub:
+   ```bash
+   git commit -m "Release v1.0.12"
+   git tag v1.0.12
+   git push origin main v1.0.12
+   ```
+   Pushing the tag triggers the GitHub Actions workflow, which archives the notarized `PhotoPrint.app` with `ditto` and attaches the zip package to the new release.
+
 ## How It Works
 
 1. **Open Directory:** Click the **Folder Source** button to select a folder containing images.
